@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  mcpd:
+    build: 
+      context: ./mcpd
+    image: ghcr.io/lukin001655/itex-mcpd:latest
+    container_name: itex-mcpd
+    restart: always
+    volumes:
+      - ./certs:/app/certs
+      - ./config:/app/config
+      - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - JWT_SECRET=${JWT_SECRET}
+      - CEO_PUBLIC_KEY_PATH=/app/certs/ceo_public.pem
+      - MCP_PRIVATE_KEY_PATH=/app/certs/mcp_private.key
+      - LOG_LEVEL=info
+      - TELEGRAM_BOT_TOKEN=${TELEDFSM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - ADMIN_TELEGRAM_IDS=${ADMIN_TELEGRAM_IDS}
+    ports:
+      - 8443:8443
+    networks:
+      - net_portal
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: itex-postgres
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: postgres
+      POSTGRES_DB: itex_portal
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - net_portal
+
+  api:
+    image: ghcr.io/lukin001655/itex-api:latest
+    container_name: itex-api
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql://postgres:${ POSTGRES_PASSWORD}@postgres:5432/itex_portal
+      - JWT_SECRET=${JWT_SECRET}
+    ports:
+      - 8080:8080
+    networks:
+      - net_portal
+
+  webapp:
+    image: ghcr.io/lukin001655/itex-webapp:latest
+    container_name: itex-webapp
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - 3000:3000
+    networks:
+      - net_portal
+
+  redis:
+    image: redis:alpine
+    container_name: itex-redis
+    restart: always
+    volumes:
+      - redis-data:/data
+    networks:
+      - net_portal
+
+  watchtower:
+    image: containrr/watchtower
+    container_name: itex-watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 300 --cleanup
+    networks:
+      - net_portal
+
+networks:
+  net_portal:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
